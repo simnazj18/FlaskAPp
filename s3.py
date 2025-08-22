@@ -6,7 +6,7 @@ from io import BytesIO
 app = Flask(__name__)
 app.secret_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzem5wYm9xdXR6eHB5d3Bzd3pqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzIyNzksImV4cCI6MjA3MDc0ODI3OX0.GuWprRk5n0uoCww_WXHIt2cQJhi038oKd6WDxO__JK0"  # Change this in production
 
-# Supabase configuration
+
 SUPABASE_URL = "https://tsznpboqutzxpywpswzj.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzem5wYm9xdXR6eHB5d3Bzd3pqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzIyNzksImV4cCI6MjA3MDc0ODI3OX0.GuWprRk5n0uoCww_WXHIt2cQJhi038oKd6WDxO__JK0"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -17,7 +17,7 @@ def index():
     folder_path = request.args.get('folder', '')
     
     try:
-        list_options = {"limit": 100, "offset": 0}
+        list_options = {"limit": 100, "offset": 0}# Extract just the filename for the default move name
         if folder_path:
             list_options["prefix"] = folder_path
         
@@ -39,17 +39,23 @@ def index():
             if not name or name == folder_path:
                 continue
 
+            
+            if folder_path:
+                full_path = f"{folder_path.rstrip('/')}/{name}"
+            else:
+                full_path = name
+
             if item.get("metadata") is None:
                 contents.append({
                     "name": name,
                     "type": "folder",
-                    "path": name
+                    "path": full_path
                 })
             else:
                 contents.append({
                     "name": name,
                     "type": "file", 
-                    "path": name,
+                    "path": full_path,
                     "size": item.get("metadata", {}).get("size", 0)
                 })
                 
@@ -131,6 +137,53 @@ def delete_file(bucket):
     
     return redirect(url_for('index', bucket=bucket, folder=folder))
 
+def delete_folder_recursive(bucket, folder_path):
+    """Recursively delete all files and subfolders in a folder"""
+    try:
+        
+        res = supabase.storage.from_(bucket).list(folder_path, {"limit": 1000})
+        files_to_delete = []
+        
+        if isinstance(res, list):
+            data = res
+        elif isinstance(res, dict) and res.get('data'):
+            data = res['data']
+        else:
+            data = []
+        
+        for item in data:
+            if not item or not isinstance(item, dict):
+                continue
+                
+            name = item.get('name')
+            if not name:
+                continue
+                
+            item_path = f"{folder_path.rstrip('/')}/{name}"
+            
+            
+            if item.get('metadata') is None:
+                delete_folder_recursive(bucket, item_path)
+            else:
+                
+                files_to_delete.append(item_path)
+        
+        
+        if files_to_delete:
+            supabase.storage.from_(bucket).remove(files_to_delete)
+        
+        
+        try:
+            supabase.storage.from_(bucket).remove([f"{folder_path.rstrip('/')}/.keep"])
+        except:
+            pass  
+            
+        return True
+        
+    except Exception as e:
+        print(f"Error in recursive delete: {str(e)}")
+        return False
+
 @app.route('/delete_folder/<bucket>')
 def delete_folder(bucket):
     folder_path = request.args.get('path')
@@ -141,32 +194,13 @@ def delete_folder(bucket):
         return redirect(url_for('index', bucket=bucket))
     
     try:
-        res = supabase.storage.from_(bucket).list(folder_path, {"limit": 1000})
-        files_to_delete = []
-
-        if isinstance(res, list):
-            for item in res:
-                if not item or not isinstance(item, dict):
-                    continue
-                if item.get('name'):
-                    files_to_delete.append(f"{folder_path}/{item['name']}")
-        elif isinstance(res, dict) and res.get('data'):
-            for item in res['data']:
-                if not item or not isinstance(item, dict):
-                    continue
-                if item.get('name'):
-                    files_to_delete.append(f"{folder_path}/{item['name']}")
-
-        files_to_delete.append(f"{folder_path}/.keep")
         
-        if files_to_delete:
-            delete_res = supabase.storage.from_(bucket).remove(files_to_delete)
-            if isinstance(delete_res, dict) and delete_res.get("error"):
-                flash(f"Error deleting folder: {delete_res['error']['message']}")
-            else:
-                flash(f"Folder '{folder_path}' deleted successfully.")
+        success = delete_folder_recursive(bucket, folder_path)
+        
+        if success:
+            flash(f"Folder '{folder_path}' and all its contents deleted successfully.")
         else:
-            flash("Folder is empty or does not exist.")
+            flash(f"Error deleting folder '{folder_path}'. Some files may remain.")
             
     except Exception as e:
         flash(f"Error deleting folder: {str(e)}")
@@ -179,12 +213,18 @@ def copy_file(bucket):
     folder = request.args.get('folder', '')
     
     if request.method == "GET":
+        
+        filename = file_path.split('/')[-1] if '/' in file_path else file_path
+        default_path = f"copy_of_{filename}"
+        if folder:
+            default_path = f"{folder.rstrip('/')}/{default_path}"
+            
         return render_template("copy_move.html", 
                              action="Copy", 
                              file_path=file_path,
                              bucket=bucket,
                              folder=folder,
-                             default_path=f"copy_of_{file_path}")
+                             default_path=default_path)
     
     new_path = request.form.get("new_path", "").strip()
     if not new_path:
@@ -214,12 +254,18 @@ def move_file(bucket):
     folder = request.args.get('folder', '')
     
     if request.method == "GET":
+        
+        filename = file_path.split('/')[-1] if '/' in file_path else file_path
+        default_path = f"moved_{filename}"
+        if folder:
+            default_path = f"{folder.rstrip('/')}/{default_path}"
+            
         return render_template("copy_move.html", 
                              action="Move", 
                              file_path=file_path,
                              bucket=bucket,
                              folder=folder,
-                             default_path=f"moved_{file_path}")
+                             default_path=default_path)
     
     new_path = request.form.get("new_path", "").strip()
     if not new_path:
