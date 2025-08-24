@@ -41,9 +41,64 @@
         
         .bucket-info {
             background: rgba(255,255,255,0.1);
-            padding: 10px;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .bucket-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .bucket-selector select {
+            padding: 8px 15px;
+            border: none;
             border-radius: 5px;
-            margin-top: 10px;
+            background: white;
+            color: #2c3e50;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        .bucket-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-header {
+            padding: 8px 15px;
+            border: 2px solid white;
+            background: transparent;
+            color: white;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-header:hover {
+            background: white;
+            color: #3498db;
+        }
+        
+        .btn-header.danger {
+            border-color: #e74c3c;
+            color: #e74c3c;
+        }
+        
+        .btn-header.danger:hover {
+            background: #e74c3c;
+            color: white;
         }
         
         .content {
@@ -101,6 +156,17 @@
             font-size: 14px;
         }
         
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+        
         .btn {
             background: linear-gradient(135deg, #3498db, #2980b9);
             color: white;
@@ -116,20 +182,20 @@
             background: linear-gradient(135deg, #2980b9, #1f4e79);
         }
         
-        .btn-danger {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
-        }
-        
-        .btn-danger:hover {
-            background: linear-gradient(135deg, #c0392b, #a93226);
-        }
-        
         .btn-success {
             background: linear-gradient(135deg, #27ae60, #219a52);
         }
         
         .btn-success:hover {
             background: linear-gradient(135deg, #219a52, #1e8449);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+        
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #c0392b, #a93226);
         }
         
         .files-section {
@@ -208,12 +274,15 @@
         .file-actions {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
         
         .btn-sm {
             padding: 5px 10px;
             font-size: 12px;
             border-radius: 3px;
+            text-decoration: none;
+            color: white;
         }
         
         .flash-messages {
@@ -246,6 +315,72 @@
             margin-bottom: 15px;
             opacity: 0.5;
         }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 400px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .close {
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #aaa;
+        }
+        
+        .close:hover {
+            color: #000;
+        }
+        
+        @media (max-width: 768px) {
+            .bucket-info {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .bucket-selector {
+                justify-content: center;
+            }
+            
+            .bucket-actions {
+                justify-content: center;
+            }
+            
+            .actions {
+                grid-template-columns: 1fr;
+            }
+            
+            .file-actions {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -253,15 +388,34 @@
         <div class="header">
             <h1>🗂️ S3 File Manager</h1>
             <div class="bucket-info">
-                <strong>Bucket:</strong> {{ bucket_name }}
+                <div class="bucket-selector">
+                    <strong>Bucket:</strong>
+                    <select onchange="switchBucket(this.value)">
+                        {% for bucket in available_buckets %}
+                            <option value="{{ bucket }}" {% if bucket == bucket_name %}selected{% endif %}>
+                                {{ bucket }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="bucket-actions">
+                    <button onclick="openCreateBucketModal()" class="btn-header">
+                        📦 Create Bucket
+                    </button>
+                    <button onclick="openDeleteBucketModal()" class="btn-header danger">
+                        🗑️ Delete Bucket
+                    </button>
+                </div>
                 {% if current_folder %}
-                <br><strong>Current Folder:</strong> {{ current_folder }}
+                <div style="margin-top: 10px; width: 100%; text-align: center;">
+                    <strong>Current Folder:</strong> {{ current_folder }}
+                </div>
                 {% endif %}
             </div>
         </div>
         
         <div class="content">
-            
+            <!-- Flash Messages -->
             {% with messages = get_flashed_messages() %}
                 {% if messages %}
                     <div class="flash-messages">
@@ -274,9 +428,9 @@
                 {% endif %}
             {% endwith %}
             
-            
+            <!-- Action Cards -->
             <div class="actions">
-                
+                <!-- Upload File -->
                 <div class="action-card">
                     <h3><span class="icon">📤</span> Upload File</h3>
                     <form method="post" action="{{ url_for('upload_file', bucket=bucket_name) }}" enctype="multipart/form-data">
@@ -292,7 +446,7 @@
                     </form>
                 </div>
                 
-                
+                <!-- Create Folder -->
                 <div class="action-card">
                     <h3><span class="icon">📁</span> Create Folder</h3>
                     <form method="post" action="{{ url_for('create_folder', bucket=bucket_name) }}">
@@ -306,13 +460,13 @@
                 </div>
             </div>
             
-            
+            <!-- Files Section -->
             <div class="files-section">
                 <div class="files-header">
                     <h3><span class="icon">📋</span> Contents</h3>
                 </div>
                 
-                
+                <!-- Breadcrumb Navigation -->
                 {% if current_folder %}
                 <div class="breadcrumb">
                     <a href="{{ url_for('index', bucket=bucket_name) }}">🏠 Root</a>
@@ -377,7 +531,7 @@
                         {% endfor %}
                     {% else %}
                         <div class="empty-state">
-                            <div class="icon">📭</div>
+                            <div class="icon">🔭</div>
                             <h3>No files or folders found</h3>
                             <p>Upload a file or create a folder to get started!</p>
                         </div>
@@ -387,8 +541,118 @@
         </div>
     </div>
     
+    <!-- Create Bucket Modal -->
+    <div id="createBucketModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📦 Create New Bucket</h3>
+                <span class="close" onclick="closeModal('createBucketModal')">&times;</span>
+            </div>
+            <form method="post" action="{{ url_for('create_bucket') }}">
+                <div class="form-group">
+                    <label for="bucket_name">Bucket Name:</label>
+                    <input type="text" id="bucket_name" name="bucket_name" required 
+                           placeholder="my-new-bucket" 
+                           pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]" 
+                           title="Bucket name must contain only lowercase letters, numbers, and hyphens">
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="bucket_public" name="bucket_public">
+                    <label for="bucket_public">Make bucket public</label>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" onclick="closeModal('createBucketModal')" class="btn" style="background: #6c757d; margin-right: 10px;">Cancel</button>
+                    <button type="submit" class="btn btn-success">Create Bucket</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Delete Bucket Modal -->
+    <div id="deleteBucketModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🗑️ Delete Bucket</h3>
+                <span class="close" onclick="closeModal('deleteBucketModal')">&times;</span>
+            </div>
+            <div style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                <strong>⚠️ Warning:</strong> This will permanently delete the bucket "{{ bucket_name }}" and all its contents. This action cannot be undone.
+            </div>
+            <form method="post" action="{{ url_for('delete_bucket') }}">
+                <input type="hidden" name="bucket_name" value="{{ bucket_name }}">
+                <div class="form-group">
+                    <label for="confirm_bucket_name">Type the bucket name to confirm deletion:</label>
+                    <input type="text" id="confirm_bucket_name" required 
+                           placeholder="Type '{{ bucket_name }}' to confirm"
+                           onkeyup="validateBucketDeletion()">
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" onclick="closeModal('deleteBucketModal')" class="btn" style="background: #6c757d; margin-right: 10px;">Cancel</button>
+                    <button type="submit" id="deleteBucketBtn" class="btn btn-danger" disabled>Delete Bucket</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
+        // Switch bucket functionality
+        function switchBucket(bucketName) {
+            window.location.href = `{{ url_for('index') }}?bucket=${bucketName}`;
+        }
         
+        // Modal functionality
+        function openCreateBucketModal() {
+            document.getElementById('createBucketModal').style.display = 'block';
+        }
+        
+        function openDeleteBucketModal() {
+            const bucketName = '{{ bucket_name }}';
+            if (bucketName === 'my-files') {
+                alert('Cannot delete the default bucket "my-files".');
+                return;
+            }
+            document.getElementById('deleteBucketModal').style.display = 'block';
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+            // Reset forms
+            if (modalId === 'createBucketModal') {
+                document.getElementById('bucket_name').value = '';
+                document.getElementById('bucket_public').checked = false;
+            }
+            if (modalId === 'deleteBucketModal') {
+                document.getElementById('confirm_bucket_name').value = '';
+                document.getElementById('deleteBucketBtn').disabled = true;
+            }
+        }
+        
+        function validateBucketDeletion() {
+            const bucketName = '{{ bucket_name }}';
+            const confirmName = document.getElementById('confirm_bucket_name').value;
+            const deleteBtn = document.getElementById('deleteBucketBtn');
+            
+            if (confirmName === bucketName) {
+                deleteBtn.disabled = false;
+            } else {
+                deleteBtn.disabled = true;
+            }
+        }
+        
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const createModal = document.getElementById('createBucketModal');
+            const deleteModal = document.getElementById('deleteBucketModal');
+            
+            if (event.target === createModal) {
+                closeModal('createBucketModal');
+            }
+            if (event.target === deleteModal) {
+                closeModal('deleteBucketModal');
+            }
+        }
+        
+        // File list animations
         document.querySelectorAll('.file-item').forEach(item => {
             item.addEventListener('mouseenter', function() {
                 this.style.transform = 'translateX(5px)';
@@ -399,7 +663,7 @@
             });
         });
         
-        
+        // Auto-hide flash messages
         setTimeout(() => {
             const flashMessages = document.querySelectorAll('.flash-message');
             flashMessages.forEach(msg => {
